@@ -1,0 +1,49 @@
+# VERITAS.AI
+
+Plataforma de inteligência artificial para detecção de anomalias em dados públicos, com foco em transparência, governança e combate a irregularidades.
+
+## 🔍 Módulo inicial: AmazonWatch
+
+Sistema de monitoramento de contratos públicos nas áreas de saúde, obras e educação.
+
+## 🎯 Objetivo
+
+Identificar indícios de:
+
+* superfaturamento
+* concentração de fornecedores
+* dispensa irregular de licitação
+* padrões atípicos em contratos
+
+## 🧠 Abordagem
+
+* Machine Learning (Isolation Forest)
+* Regras heurísticas baseadas em auditoria pública
+* Análise exploratória de dados governamentais
+
+## 🌎 Contexto
+
+Foco inicial na região amazônica, com análise de dados públicos e contratos no período da COVID-19 até o presente.
+
+## 🖥️ Status
+
+* Protótipo funcional (frontend)
+* Integração com dados reais em desenvolvimento
+* Backend e modelo de IA em construção
+
+## 🚀 Próximos passos
+
+* API com FastAPI
+* Integração com bases públicas automatizadas
+* Detecção de redes de fornecedores
+* Sistema de alerta em tempo real
+
+## 📊 Impacto esperado
+
+* Apoio à fiscalização pública
+* Transparência e controle social
+* Aplicação em pesquisa acadêmica (Doutorado)
+
+---
+
+Projeto em desenvolvimento.
