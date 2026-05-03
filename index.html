@@ -1,0 +1,1476 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AmazonWatch — Detecção de Anomalias em Gastos Públicos</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Space+Mono:wght@400;700&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #060d0a;
+    --surface: #0d1a14;
+    --surface2: #122019;
+    --border: #1e3528;
+    --green: #00e87a;
+    --green-dim: #00b85f;
+    --green-glow: rgba(0,232,122,0.15);
+    --yellow: #f5c842;
+    --red: #ff4d4d;
+    --red-dim: #cc2e2e;
+    --orange: #ff8c42;
+    --text: #d4ead9;
+    --text-dim: #6b8f76;
+    --text-muted: #3a5944;
+    --accent: #00e87a;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', sans-serif;
+    font-size: 14px;
+    line-height: 1.6;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Animated background grid */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: 
+      linear-gradient(rgba(0,232,122,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,232,122,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* Noise texture overlay */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.5;
+  }
+
+  .wrapper { position: relative; z-index: 1; }
+
+  /* HEADER */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 32px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(6,13,10,0.9);
+    backdrop-filter: blur(12px);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .logo-icon {
+    width: 36px;
+    height: 36px;
+    position: relative;
+  }
+
+  .logo-icon svg { width: 100%; height: 100%; }
+
+  .logo-text {
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    font-size: 20px;
+    letter-spacing: -0.5px;
+    color: #fff;
+  }
+
+  .logo-text span { color: var(--green); }
+
+  .logo-sub {
+    font-family: 'Space Mono', monospace;
+    font-size: 9px;
+    color: var(--text-dim);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-top: -2px;
+  }
+
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+  }
+
+  .live-badge {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    color: var(--green);
+    letter-spacing: 1px;
+  }
+
+  .live-dot {
+    width: 7px;
+    height: 7px;
+    background: var(--green);
+    border-radius: 50%;
+    animation: pulse 1.8s ease-in-out infinite;
+    box-shadow: 0 0 8px var(--green);
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.4; transform: scale(0.7); }
+  }
+
+  .scope-tag {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    color: var(--text-dim);
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    padding: 4px 10px;
+    border-radius: 4px;
+    letter-spacing: 1px;
+  }
+
+  /* ALERT BANNER */
+  .alert-banner {
+    background: linear-gradient(90deg, rgba(255,77,77,0.1) 0%, rgba(255,77,77,0.05) 100%);
+    border-bottom: 1px solid rgba(255,77,77,0.3);
+    padding: 10px 32px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    animation: slideIn 0.5s ease;
+  }
+
+  @keyframes slideIn {
+    from { transform: translateY(-10px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
+
+  .alert-icon { color: var(--red); font-size: 16px; }
+
+  .alert-text {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    color: var(--red);
+    letter-spacing: 0.5px;
+  }
+
+  .alert-text strong { color: #ff7070; }
+
+  /* MAIN LAYOUT */
+  .main {
+    display: grid;
+    grid-template-columns: 260px 1fr;
+    min-height: calc(100vh - 120px);
+  }
+
+  /* SIDEBAR */
+  .sidebar {
+    border-right: 1px solid var(--border);
+    padding: 24px 0;
+    background: rgba(13,26,20,0.5);
+  }
+
+  .sidebar-section {
+    padding: 0 20px 20px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 20px;
+  }
+
+  .sidebar-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 9px;
+    color: var(--text-muted);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+
+  .filter-group { margin-bottom: 8px; }
+
+  .filter-btn {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 9px 12px;
+    border-radius: 6px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--text-dim);
+    font-family: 'Inter', sans-serif;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-align: left;
+  }
+
+  .filter-btn:hover {
+    background: var(--surface2);
+    color: var(--text);
+    border-color: var(--border);
+  }
+
+  .filter-btn.active {
+    background: var(--green-glow);
+    color: var(--green);
+    border-color: rgba(0,232,122,0.3);
+  }
+
+  .filter-btn .icon { font-size: 16px; margin-right: 8px; }
+
+  .filter-count {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    background: var(--surface2);
+    padding: 2px 6px;
+    border-radius: 3px;
+    border: 1px solid var(--border);
+  }
+
+  .filter-btn.active .filter-count {
+    background: rgba(0,232,122,0.2);
+    border-color: rgba(0,232,122,0.4);
+    color: var(--green);
+  }
+
+  /* Risk legend */
+  .risk-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 0;
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+
+  .risk-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .risk-dot.critical { background: var(--red); box-shadow: 0 0 6px var(--red); }
+  .risk-dot.high { background: var(--orange); }
+  .risk-dot.medium { background: var(--yellow); }
+  .risk-dot.low { background: var(--green-dim); }
+
+  /* CONTENT */
+  .content { padding: 24px 28px; }
+
+  /* KPI Cards */
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 28px;
+  }
+
+  .kpi-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 18px 20px;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.2s;
+    animation: fadeUp 0.5s ease both;
+  }
+
+  .kpi-card:nth-child(1) { animation-delay: 0.05s; }
+  .kpi-card:nth-child(2) { animation-delay: 0.1s; }
+  .kpi-card:nth-child(3) { animation-delay: 0.15s; }
+  .kpi-card:nth-child(4) { animation-delay: 0.2s; }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .kpi-card::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+  }
+
+  .kpi-card.alert::after { background: var(--red); }
+  .kpi-card.warn::after { background: var(--orange); }
+  .kpi-card.info::after { background: var(--yellow); }
+  .kpi-card.ok::after { background: var(--green-dim); }
+
+  .kpi-card:hover { border-color: rgba(0,232,122,0.2); }
+
+  .kpi-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 9px;
+    color: var(--text-muted);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+
+  .kpi-value {
+    font-family: 'Syne', sans-serif;
+    font-size: 28px;
+    font-weight: 800;
+    line-height: 1;
+    margin-bottom: 6px;
+  }
+
+  .kpi-card.alert .kpi-value { color: var(--red); }
+  .kpi-card.warn .kpi-value { color: var(--orange); }
+  .kpi-card.info .kpi-value { color: var(--yellow); }
+  .kpi-card.ok .kpi-value { color: var(--green); }
+
+  .kpi-sub {
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+
+  /* Section title */
+  .section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+  }
+
+  .section-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 16px;
+    font-weight: 700;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .section-title::before {
+    content: '';
+    display: block;
+    width: 4px;
+    height: 18px;
+    background: var(--green);
+    border-radius: 2px;
+  }
+
+  .count-badge {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    color: var(--red);
+    background: rgba(255,77,77,0.1);
+    border: 1px solid rgba(255,77,77,0.3);
+    padding: 2px 8px;
+    border-radius: 3px;
+  }
+
+  /* CONTRACT TABLE */
+  .table-container {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 28px;
+    animation: fadeUp 0.5s ease 0.3s both;
+  }
+
+  table { width: 100%; border-collapse: collapse; }
+
+  thead tr {
+    border-bottom: 1px solid var(--border);
+    background: var(--surface2);
+  }
+
+  th {
+    padding: 12px 16px;
+    text-align: left;
+    font-family: 'Space Mono', monospace;
+    font-size: 9px;
+    color: var(--text-muted);
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  tbody tr {
+    border-bottom: 1px solid rgba(30,53,40,0.5);
+    transition: background 0.15s;
+    cursor: pointer;
+  }
+
+  tbody tr:hover { background: rgba(0,232,122,0.04); }
+  tbody tr:last-child { border-bottom: none; }
+
+  td {
+    padding: 13px 16px;
+    font-size: 12.5px;
+    vertical-align: middle;
+  }
+
+  .contract-id {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    color: var(--text-dim);
+  }
+
+  .contract-name {
+    color: var(--text);
+    font-weight: 500;
+    max-width: 220px;
+  }
+
+  .contract-supplier {
+    color: var(--text-dim);
+    font-size: 11px;
+    max-width: 180px;
+  }
+
+  .area-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+
+  .area-tag.saude { background: rgba(255,77,77,0.1); color: #ff8080; border: 1px solid rgba(255,77,77,0.2); }
+  .area-tag.obras { background: rgba(255,140,66,0.1); color: #ffaa70; border: 1px solid rgba(255,140,66,0.2); }
+  .area-tag.educacao { background: rgba(245,200,66,0.1); color: #f5d070; border: 1px solid rgba(245,200,66,0.2); }
+
+  .valor {
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    color: var(--text);
+    white-space: nowrap;
+  }
+
+  /* Risk score */
+  .risk-score {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .risk-bar-bg {
+    width: 60px;
+    height: 5px;
+    background: var(--border);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+
+  .risk-bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.8s ease;
+  }
+
+  .risk-score-num {
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 13px;
+    min-width: 28px;
+  }
+
+  .risk-critical .risk-bar-fill { background: var(--red); }
+  .risk-critical .risk-score-num { color: var(--red); }
+  .risk-high .risk-bar-fill { background: var(--orange); }
+  .risk-high .risk-score-num { color: var(--orange); }
+  .risk-medium .risk-bar-fill { background: var(--yellow); }
+  .risk-medium .risk-score-num { color: var(--yellow); }
+  .risk-low .risk-bar-fill { background: var(--green-dim); }
+  .risk-low .risk-score-num { color: var(--green-dim); }
+
+  /* Anomalias detected */
+  .anomaly-tag {
+    font-size: 10px;
+    padding: 2px 7px;
+    border-radius: 3px;
+    display: inline-block;
+    margin: 1px;
+    white-space: nowrap;
+  }
+
+  .anomaly-tag.sf { background: rgba(255,77,77,0.15); color: #ff8080; border: 1px solid rgba(255,77,77,0.25); }
+  .anomaly-tag.cf { background: rgba(255,140,66,0.15); color: #ffaa70; border: 1px solid rgba(255,140,66,0.25); }
+  .anomaly-tag.dl { background: rgba(245,200,66,0.15); color: #f5d070; border: 1px solid rgba(245,200,66,0.25); }
+  .anomaly-tag.cn { background: rgba(180,100,255,0.15); color: #cc99ff; border: 1px solid rgba(180,100,255,0.25); }
+
+  /* BOTTOM GRID */
+  .bottom-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    animation: fadeUp 0.5s ease 0.5s both;
+  }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+  }
+
+  .panel-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  /* Bar chart */
+  .bar-chart { display: flex; flex-direction: column; gap: 10px; }
+
+  .bar-row {
+    display: grid;
+    grid-template-columns: 90px 1fr 70px;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .bar-label { font-size: 11px; color: var(--text-dim); }
+
+  .bar-bg {
+    height: 8px;
+    background: var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  .bar-fill {
+    height: 100%;
+    border-radius: 4px;
+    animation: growBar 1s ease both;
+  }
+
+  @keyframes growBar {
+    from { width: 0 !important; }
+  }
+
+  .bar-val {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    color: var(--text-dim);
+    text-align: right;
+  }
+
+  /* Fornecedor list */
+  .supplier-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid rgba(30,53,40,0.5);
+  }
+
+  .supplier-item:last-child { border-bottom: none; }
+
+  .supplier-rank {
+    font-family: 'Syne', sans-serif;
+    font-size: 20px;
+    font-weight: 800;
+    color: var(--text-muted);
+    line-height: 1;
+    min-width: 24px;
+  }
+
+  .supplier-info { flex: 1; }
+
+  .supplier-name {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text);
+    margin-bottom: 2px;
+  }
+
+  .supplier-cnpj {
+    font-family: 'Space Mono', monospace;
+    font-size: 9px;
+    color: var(--text-muted);
+  }
+
+  .supplier-flags { display: flex; gap: 4px; margin-top: 4px; flex-wrap: wrap; }
+
+  .flag {
+    font-size: 9px;
+    padding: 1px 5px;
+    border-radius: 2px;
+    letter-spacing: 0.5px;
+  }
+
+  .flag.red { background: rgba(255,77,77,0.15); color: var(--red); border: 1px solid rgba(255,77,77,0.2); }
+  .flag.yellow { background: rgba(245,200,66,0.15); color: var(--yellow); border: 1px solid rgba(245,200,66,0.2); }
+  .flag.orange { background: rgba(255,140,66,0.15); color: var(--orange); border: 1px solid rgba(255,140,66,0.2); }
+
+  .supplier-valor {
+    font-family: 'Syne', sans-serif;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--orange);
+    white-space: nowrap;
+  }
+
+  /* Footer */
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 14px 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-family: 'Space Mono', monospace;
+    font-size: 9px;
+    color: var(--text-muted);
+    letter-spacing: 1px;
+  }
+
+  /* MODAL */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(6,13,10,0.85);
+    backdrop-filter: blur(6px);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s;
+  }
+
+  .modal-overlay.open {
+    opacity: 1;
+    pointer-events: all;
+  }
+
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    width: 620px;
+    max-width: 90vw;
+    max-height: 80vh;
+    overflow-y: auto;
+    transform: scale(0.95) translateY(10px);
+    transition: transform 0.3s;
+  }
+
+  .modal-overlay.open .modal { transform: scale(1) translateY(0); }
+
+  .modal-header {
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    position: sticky;
+    top: 0;
+    background: var(--surface);
+    z-index: 10;
+  }
+
+  .modal-title {
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 16px;
+    color: #fff;
+  }
+
+  .modal-id {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    color: var(--text-dim);
+    margin-top: 3px;
+  }
+
+  .close-btn {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    width: 28px;
+    height: 28px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+    flex-shrink: 0;
+  }
+
+  .close-btn:hover { background: rgba(255,77,77,0.1); color: var(--red); border-color: rgba(255,77,77,0.3); }
+
+  .modal-body { padding: 24px; }
+
+  .modal-section { margin-bottom: 20px; }
+
+  .modal-section-title {
+    font-family: 'Space Mono', monospace;
+    font-size: 9px;
+    color: var(--text-muted);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+
+  .info-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  .info-item {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 12px;
+  }
+
+  .info-item-label {
+    font-size: 10px;
+    color: var(--text-muted);
+    margin-bottom: 3px;
+  }
+
+  .info-item-value {
+    font-size: 13px;
+    color: var(--text);
+    font-weight: 500;
+  }
+
+  .anomaly-list { display: flex; flex-direction: column; gap: 8px; }
+
+  .anomaly-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px;
+  }
+
+  .anomaly-item.critical { border-color: rgba(255,77,77,0.3); }
+  .anomaly-item.high { border-color: rgba(255,140,66,0.3); }
+
+  .anomaly-severity {
+    font-family: 'Space Mono', monospace;
+    font-size: 9px;
+    padding: 2px 6px;
+    border-radius: 3px;
+    white-space: nowrap;
+    margin-top: 1px;
+  }
+
+  .anomaly-severity.critical { background: rgba(255,77,77,0.2); color: var(--red); }
+  .anomaly-severity.high { background: rgba(255,140,66,0.2); color: var(--orange); }
+  .anomaly-severity.medium { background: rgba(245,200,66,0.2); color: var(--yellow); }
+
+  .anomaly-desc { font-size: 12px; color: var(--text-dim); line-height: 1.5; }
+  .anomaly-desc strong { color: var(--text); }
+
+  .modal-risk-display {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    background: var(--surface2);
+    border-radius: 8px;
+    padding: 16px;
+    border: 1px solid var(--border);
+  }
+
+  .modal-risk-score {
+    font-family: 'Syne', sans-serif;
+    font-size: 48px;
+    font-weight: 800;
+    line-height: 1;
+  }
+
+  .modal-risk-label { font-size: 12px; color: var(--text-dim); margin-top: 4px; }
+
+  .modal-risk-bar-bg {
+    flex: 1;
+    height: 12px;
+    background: var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+
+  .modal-risk-bar-fill {
+    height: 100%;
+    border-radius: 6px;
+  }
+
+  .filter-tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+
+  .tab-btn {
+    padding: 6px 12px;
+    border-radius: 5px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-dim);
+    font-size: 11px;
+    cursor: pointer;
+    font-family: 'Inter', sans-serif;
+    transition: all 0.15s;
+  }
+
+  .tab-btn:hover { background: var(--surface2); color: var(--text); }
+  .tab-btn.active { background: var(--green-glow); color: var(--green); border-color: rgba(0,232,122,0.3); }
+
+  .mini-chart {
+    display: flex;
+    align-items: flex-end;
+    gap: 4px;
+    height: 50px;
+    margin-top: 8px;
+  }
+
+  .mini-bar {
+    flex: 1;
+    background: var(--border);
+    border-radius: 2px 2px 0 0;
+    position: relative;
+    overflow: hidden;
+    animation: growUp 0.8s ease both;
+  }
+
+  @keyframes growUp {
+    from { transform: scaleY(0); transform-origin: bottom; }
+    to { transform: scaleY(1); transform-origin: bottom; }
+  }
+
+  .mini-bar-fill {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    border-radius: 2px 2px 0 0;
+  }
+
+  .mini-bar:nth-child(1) { animation-delay: 0.05s; }
+  .mini-bar:nth-child(2) { animation-delay: 0.1s; }
+  .mini-bar:nth-child(3) { animation-delay: 0.15s; }
+  .mini-bar:nth-child(4) { animation-delay: 0.2s; }
+  .mini-bar:nth-child(5) { animation-delay: 0.25s; }
+  .mini-bar:nth-child(6) { animation-delay: 0.3s; }
+
+  .scrollable { overflow-x: auto; }
+
+  /* Responsive */
+  @media (max-width: 900px) {
+    .main { grid-template-columns: 1fr; }
+    .sidebar { display: none; }
+    .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+    .bottom-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="wrapper">
+
+<!-- HEADER -->
+<header>
+  <div class="logo">
+    <div class="logo-icon">
+      <svg viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="18" cy="18" r="17" stroke="#1e3528" stroke-width="1.5"/>
+        <circle cx="18" cy="18" r="17" stroke="#00e87a" stroke-width="1.5" stroke-dasharray="5 3" opacity="0.4"/>
+        <path d="M8 22 Q11 14 14 18 Q17 22 20 12 Q23 6 26 16" stroke="#00e87a" stroke-width="2" fill="none" stroke-linecap="round"/>
+        <circle cx="18" cy="18" r="3" fill="#00e87a" opacity="0.3"/>
+        <circle cx="18" cy="18" r="1.5" fill="#00e87a"/>
+      </svg>
+    </div>
+    <div>
+      <div class="logo-text">Amazon<span>Watch</span></div>
+      <div class="logo-sub">Inteligência de Gastos Públicos · AM</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="live-badge">
+      <div class="live-dot"></div>
+      MONITORAMENTO ATIVO
+    </div>
+    <div class="scope-tag">SAÚDE · OBRAS · EDUCAÇÃO</div>
+  </div>
+</header>
+
+<!-- ALERT BANNER -->
+<div class="alert-banner">
+  <span class="alert-icon">⚠</span>
+  <span class="alert-text">
+    <strong>3 contratos críticos</strong> detectados nas últimas 24h — Score de risco acima de 85 · Secretaria de Saúde do AM e SEMED Manaus
+  </span>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sidebar-section">
+      <div class="sidebar-label">Área Temática</div>
+      <div class="filter-group">
+        <button class="filter-btn active" onclick="filterArea('all', this)">
+          <span><span class="icon">◉</span> Todas as áreas</span>
+          <span class="filter-count">47</span>
+        </button>
+      </div>
+      <div class="filter-group">
+        <button class="filter-btn" onclick="filterArea('saude', this)">
+          <span><span class="icon">🏥</span> Saúde</span>
+          <span class="filter-count">21</span>
+        </button>
+      </div>
+      <div class="filter-group">
+        <button class="filter-btn" onclick="filterArea('obras', this)">
+          <span><span class="icon">🏗️</span> Obras / Infraestrutura</span>
+          <span class="filter-count">14</span>
+        </button>
+      </div>
+      <div class="filter-group">
+        <button class="filter-btn" onclick="filterArea('educacao', this)">
+          <span><span class="icon">📚</span> Educação</span>
+          <span class="filter-count">12</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">Nível de Risco</div>
+      <div class="risk-item"><div class="risk-dot critical"></div> Crítico (85–100) <span style="margin-left:auto;font-family:Space Mono,monospace;font-size:10px;color:#ff4d4d">3</span></div>
+      <div class="risk-item"><div class="risk-dot high"></div> Alto (65–84) <span style="margin-left:auto;font-family:Space Mono,monospace;font-size:10px;color:#ff8c42">11</span></div>
+      <div class="risk-item"><div class="risk-dot medium"></div> Médio (40–64) <span style="margin-left:auto;font-family:Space Mono,monospace;font-size:10px;color:#f5c842">19</span></div>
+      <div class="risk-item"><div class="risk-dot low"></div> Baixo (0–39) <span style="margin-left:auto;font-family:Space Mono,monospace;font-size:10px;color:#00b85f">14</span></div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">Tipo de Anomalia</div>
+      <div style="display:flex;flex-direction:column;gap:6px;padding-top:4px">
+        <div class="anomaly-tag sf" style="display:inline-block">Superfaturamento</div>
+        <div class="anomaly-tag cf" style="display:inline-block">CNPJ Suspeito</div>
+        <div class="anomaly-tag dl" style="display:inline-block">Dispensa Ilícita</div>
+        <div class="anomaly-tag cn" style="display:inline-block">Concentração</div>
+      </div>
+    </div>
+
+    <div style="padding: 0 20px">
+      <div class="sidebar-label">Período Analisado</div>
+      <div style="font-family:Space Mono,monospace;font-size:10px;color:var(--text-dim);margin-top:4px">Jan 2023 — Mai 2025</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:6px">Fontes: Portal AM · Portal Manaus · PNCP · Receita Federal</div>
+    </div>
+  </aside>
+
+  <!-- CONTENT -->
+  <main class="content">
+
+    <!-- KPIs -->
+    <div class="kpi-grid">
+      <div class="kpi-card alert">
+        <div class="kpi-label">Anomalias Críticas</div>
+        <div class="kpi-value">3</div>
+        <div class="kpi-sub">Requerem ação imediata</div>
+      </div>
+      <div class="kpi-card warn">
+        <div class="kpi-label">Valor Suspeito Total</div>
+        <div class="kpi-value">R$47M</div>
+        <div class="kpi-sub">Em 14 contratos de risco alto+</div>
+      </div>
+      <div class="kpi-card info">
+        <div class="kpi-label">Contratos Monitorados</div>
+        <div class="kpi-value">47</div>
+        <div class="kpi-sub">Últimas 24 horas</div>
+      </div>
+      <div class="kpi-card ok">
+        <div class="kpi-label">Precisão do Modelo</div>
+        <div class="kpi-value">91%</div>
+        <div class="kpi-sub">Isolation Forest + Rede</div>
+      </div>
+    </div>
+
+    <!-- CONTRATOS TABLE -->
+    <div class="section-header">
+      <div class="section-title">Contratos com Anomalias Detectadas</div>
+      <div>
+        <div class="filter-tabs" style="margin-bottom:0">
+          <button class="tab-btn active">Todos</button>
+          <button class="tab-btn">Críticos</button>
+          <button class="tab-btn">Altos</button>
+          <button class="tab-btn">Médios</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="table-container scrollable">
+      <table>
+        <thead>
+          <tr>
+            <th>ID Contrato</th>
+            <th>Objeto / Fornecedor</th>
+            <th>Área</th>
+            <th>Valor (R$)</th>
+            <th>Score Risco</th>
+            <th>Anomalias</th>
+          </tr>
+        </thead>
+        <tbody id="contractTable">
+          <!-- JS rendered -->
+        </tbody>
+      </table>
+    </div>
+
+    <!-- BOTTOM PANELS -->
+    <div class="bottom-grid">
+
+      <!-- Distribuição por área -->
+      <div class="panel">
+        <div class="panel-title">📊 Valor Suspeito por Área</div>
+        <div class="bar-chart">
+          <div class="bar-row">
+            <div class="bar-label">🏥 Saúde</div>
+            <div class="bar-bg"><div class="bar-fill" style="width:78%;background:#ff4d4d"></div></div>
+            <div class="bar-val">R$ 28,4M</div>
+          </div>
+          <div class="bar-row">
+            <div class="bar-label">🏗️ Obras</div>
+            <div class="bar-bg"><div class="bar-fill" style="width:50%;background:#ff8c42"></div></div>
+            <div class="bar-val">R$ 13,2M</div>
+          </div>
+          <div class="bar-row">
+            <div class="bar-label">📚 Educação</div>
+            <div class="bar-bg"><div class="bar-fill" style="width:22%;background:#f5c842"></div></div>
+            <div class="bar-val">R$ 5,8M</div>
+          </div>
+        </div>
+
+        <div style="margin-top:20px">
+          <div class="panel-title" style="margin-bottom:8px">📅 Anomalias por Mês (2025)</div>
+          <div class="mini-chart">
+            <div class="mini-bar" style="animation-delay:0.05s">
+              <div class="mini-bar-fill" style="height:40%;background:rgba(245,200,66,0.4)"></div>
+            </div>
+            <div class="mini-bar" style="animation-delay:0.1s">
+              <div class="mini-bar-fill" style="height:55%;background:rgba(255,140,66,0.5)"></div>
+            </div>
+            <div class="mini-bar" style="animation-delay:0.15s">
+              <div class="mini-bar-fill" style="height:70%;background:rgba(255,77,77,0.6)"></div>
+            </div>
+            <div class="mini-bar" style="animation-delay:0.2s">
+              <div class="mini-bar-fill" style="height:45%;background:rgba(245,200,66,0.4)"></div>
+            </div>
+            <div class="mini-bar" style="animation-delay:0.25s">
+              <div class="mini-bar-fill" style="height:90%;background:rgba(255,77,77,0.8)"></div>
+            </div>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-top:4px">
+            <span style="font-family:Space Mono,monospace;font-size:8px;color:var(--text-muted)">JAN</span>
+            <span style="font-family:Space Mono,monospace;font-size:8px;color:var(--text-muted)">FEV</span>
+            <span style="font-family:Space Mono,monospace;font-size:8px;color:var(--text-muted)">MAR</span>
+            <span style="font-family:Space Mono,monospace;font-size:8px;color:var(--text-muted)">ABR</span>
+            <span style="font-family:Space Mono,monospace;font-size:8px;color:var(--text-muted)">MAI</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Fornecedores suspeitos -->
+      <div class="panel">
+        <div class="panel-title">🚩 Fornecedores de Alto Risco</div>
+        <div class="supplier-item">
+          <div class="supplier-rank">1</div>
+          <div class="supplier-info">
+            <div class="supplier-name">MedPharma Distribuições Ltda.</div>
+            <div class="supplier-cnpj">CNPJ: 12.345.678/0001-90</div>
+            <div class="supplier-flags">
+              <span class="flag red">CNPJ SUSPEITO</span>
+              <span class="flag red">SUPERFATURAMENTO</span>
+            </div>
+          </div>
+          <div class="supplier-valor">R$14,2M</div>
+        </div>
+        <div class="supplier-item">
+          <div class="supplier-rank">2</div>
+          <div class="supplier-info">
+            <div class="supplier-name">Construtora Novo Horizonte AM</div>
+            <div class="supplier-cnpj">CNPJ: 98.765.432/0001-11</div>
+            <div class="supplier-flags">
+              <span class="flag orange">ADITIVOS FREQ.</span>
+              <span class="flag yellow">PREÇO ACIMA MERCADO</span>
+            </div>
+          </div>
+          <div class="supplier-valor">R$9,8M</div>
+        </div>
+        <div class="supplier-item">
+          <div class="supplier-rank">3</div>
+          <div class="supplier-info">
+            <div class="supplier-name">EduMaterial Comércio ME</div>
+            <div class="supplier-cnpj">CNPJ: 45.678.901/0001-55</div>
+            <div class="supplier-flags">
+              <span class="flag red">DISPENSA ILÍCITA</span>
+              <span class="flag orange">SÓCIOS CRUZADOS</span>
+            </div>
+          </div>
+          <div class="supplier-valor">R$5,1M</div>
+        </div>
+        <div class="supplier-item">
+          <div class="supplier-rank">4</div>
+          <div class="supplier-info">
+            <div class="supplier-name">Infralog Serviços Gerais S/A</div>
+            <div class="supplier-cnpj">CNPJ: 23.456.789/0001-33</div>
+            <div class="supplier-flags">
+              <span class="flag yellow">CONCENTRAÇÃO</span>
+            </div>
+          </div>
+          <div class="supplier-valor">R$3,4M</div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+</div>
+
+<!-- FOOTER -->
+<footer>
+  <span>AMAZONWATCH v0.1 · PROTÓTIPO · DADOS SIMULADOS PARA DEMONSTRAÇÃO</span>
+  <span>Modelo: Isolation Forest + Análise de Grafo · Fontes: Portal AM · Portal Manaus · PNCP</span>
+  <span>© 2025 · Pesquisa Aplicada PPGCASA/UFAM</span>
+</footer>
+
+</div>
+
+<!-- MODAL -->
+<div class="modal-overlay" id="modalOverlay" onclick="closeModal(event)">
+  <div class="modal" id="modal">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title" id="modalTitle">—</div>
+        <div class="modal-id" id="modalId">—</div>
+      </div>
+      <button class="close-btn" onclick="closeModalBtn()">✕</button>
+    </div>
+    <div class="modal-body" id="modalBody">—</div>
+  </div>
+</div>
+
+<script>
+const contracts = [
+  {
+    id: "AM-SAU-2024-0341",
+    name: "Aquisição de Medicamentos Oncológicos",
+    supplier: "MedPharma Distribuições Ltda.",
+    cnpj: "12.345.678/0001-90",
+    area: "saude",
+    valor: "R$ 8.240.000",
+    risk: 92,
+    riskLevel: "critical",
+    anomalias: ["sf", "cf"],
+    anomaliasLabels: ["Superfaturamento", "CNPJ Suspeito"],
+    secretaria: "SUSAM — Secretaria de Saúde do AM",
+    modalidade: "Dispensa de Licitação",
+    data: "14/03/2025",
+    detalhes: [
+      { severity: "critical", desc: "<strong>Superfaturamento estimado de 340%</strong> acima da tabela CMED para os medicamentos listados no contrato. Preço médio unitário: R$ 2.840 (referência: R$ 645)." },
+      { severity: "critical", desc: "<strong>CNPJ com abertura em 2023</strong>, sem histórico de contratos com a administração pública. Sócios coincidem com empresas autuadas pela Receita Federal em 2022." },
+      { severity: "high", desc: "<strong>Dispensa de licitação</strong> utilizada sem justificativa técnica documentada. Valor total supera o limite legal para dispensa emergencial." }
+    ]
+  },
+  {
+    id: "MCM-OBR-2024-0812",
+    name: "Reforma e Ampliação de Escola Municipal",
+    supplier: "Construtora Novo Horizonte AM",
+    cnpj: "98.765.432/0001-11",
+    area: "obras",
+    valor: "R$ 6.180.000",
+    risk: 78,
+    riskLevel: "high",
+    anomalias: ["sf", "dl"],
+    anomaliasLabels: ["Superfaturamento", "Dispensa Ilícita"],
+    secretaria: "SEMEF Manaus — Obras e Infraestrutura",
+    modalidade: "Tomada de Preços",
+    data: "22/01/2025",
+    detalhes: [
+      { severity: "high", desc: "<strong>3 aditivos contratuais</strong> totalizando +72% sobre o valor original, todos dentro de 8 meses. Padrão atípico vs. contratos similares." },
+      { severity: "high", desc: "<strong>Preço por m² de R$ 4.800</strong>, acima em 58% da mediana do SINAPI para região Norte (R$ 3.038/m²)." },
+      { severity: "medium", desc: "Empresa venceu 4 contratos na mesma secretaria nos últimos 18 meses, indicando possível <strong>concentração de fornecedor</strong>." }
+    ]
+  },
+  {
+    id: "AM-SAU-2025-0108",
+    name: "Compra de Equipamentos Hospitalares UTI",
+    supplier: "MedPharma Distribuições Ltda.",
+    cnpj: "12.345.678/0001-90",
+    area: "saude",
+    valor: "R$ 5.970.000",
+    risk: 89,
+    riskLevel: "critical",
+    anomalias: ["sf", "cf", "cn"],
+    anomaliasLabels: ["Superfaturamento", "CNPJ Suspeito", "Concentração"],
+    secretaria: "SUSAM — Secretaria de Saúde do AM",
+    modalidade: "Pregão Eletrônico",
+    data: "08/02/2025",
+    detalhes: [
+      { severity: "critical", desc: "<strong>Mesmo fornecedor do contrato AM-SAU-2024-0341</strong> com segundo contrato em menos de 6 meses. Total acumulado com este CNPJ: R$ 14,2M." },
+      { severity: "high", desc: "<strong>Respiradores cotados a R$ 89.500 cada</strong>. Preço de mercado em cotações paralelas: R$ 34.200–R$ 41.000." },
+      { severity: "medium", desc: "Empresa não possui certificado de distribuição de equipamentos hospitalares junto à ANVISA para os itens cotados." }
+    ]
+  },
+  {
+    id: "MCM-EDU-2024-1542",
+    name: "Fornecimento de Merenda Escolar 2º Sem.",
+    supplier: "EduMaterial Comércio ME",
+    cnpj: "45.678.901/0001-55",
+    area: "educacao",
+    valor: "R$ 3.280.000",
+    risk: 73,
+    riskLevel: "high",
+    anomalias: ["dl", "cf"],
+    anomaliasLabels: ["Dispensa Ilícita", "CNPJ Suspeito"],
+    secretaria: "SEMED — Secretaria de Educação de Manaus",
+    modalidade: "Dispensa de Licitação",
+    data: "05/07/2024",
+    detalhes: [
+      { severity: "high", desc: "<strong>Dispensa de licitação para merenda escolar</strong> não se enquadra nos critérios legais. Valor supera limite de R$ 57.340 para dispensa." },
+      { severity: "high", desc: "<strong>Sócios da empresa têm parentesco</strong> com servidor da SEMED responsável pelo processo licitatório (2º grau)." },
+      { severity: "medium", desc: "Preço do quilo de arroz cotado a <strong>R$ 12,80</strong> vs. média de mercado de R$ 7,40 no período." }
+    ]
+  },
+  {
+    id: "AM-OBR-2024-0657",
+    name: "Pavimentação Zona Norte — Lote 3",
+    supplier: "Infralog Serviços Gerais S/A",
+    cnpj: "23.456.789/0001-33",
+    area: "obras",
+    valor: "R$ 7.040.000",
+    risk: 61,
+    riskLevel: "medium",
+    anomalias: ["cn", "sf"],
+    anomaliasLabels: ["Concentração", "Superfaturamento"],
+    secretaria: "SEINFRA — Secretaria de Infraestrutura do AM",
+    modalidade: "Concorrência Pública",
+    data: "19/09/2024",
+    detalhes: [
+      { severity: "medium", desc: "<strong>5 contratos de pavimentação</strong> para a mesma empresa em 24 meses, totalzando R$ 31,2M. Índice de concentração Herfindahl acima do limite." },
+      { severity: "medium", desc: "Custo por km de asfalto de <strong>R$ 2,1M</strong> vs. referência DNIT de R$ 1,4–1,6M para tipo de via similar." },
+      { severity: "medium", desc: "Obra com prazo de 8 meses acumula <strong>14 meses</strong> sem entrega e 2 aditivos de prazo sem penalização." }
+    ]
+  },
+  {
+    id: "MCM-SAU-2025-0234",
+    name: "Contratação OS Gestão Hospital Municipal",
+    supplier: "InstSaúde Org. Social AM",
+    cnpj: "67.890.123/0001-44",
+    area: "saude",
+    valor: "R$ 12.400.000",
+    risk: 87,
+    riskLevel: "critical",
+    anomalias: ["cf", "cn", "dl"],
+    anomaliasLabels: ["CNPJ Suspeito", "Concentração", "Dispensa Ilícita"],
+    secretaria: "SEMSA — Secretaria Municipal de Saúde de Manaus",
+    modalidade: "Chamamento Público",
+    data: "03/03/2025",
+    detalhes: [
+      { severity: "critical", desc: "<strong>OS qualificada há apenas 4 meses</strong> antes do chamamento. Sem histórico de gestão hospitalar comprovado. Qualificação expedida em prazo atipicamente curto." },
+      { severity: "critical", desc: "<strong>Mesmos diretores</strong> da OS atuaram em OS anterior que rescindiu contrato com a prefeitura por irregularidades em 2021." },
+      { severity: "high", desc: "Valor per capita de <strong>R$ 1.840/mês</strong> por leito gerenciado supera em 95% contratos similares em outras capitais da região Norte." }
+    ]
+  }
+];
+
+function getRiskClass(level) {
+  return { critical: 'risk-critical', high: 'risk-high', medium: 'risk-medium', low: 'risk-low' }[level] || 'risk-low';
+}
+
+function getAreaTag(area) {
+  const map = {
+    saude: `<span class="area-tag saude">🏥 Saúde</span>`,
+    obras: `<span class="area-tag obras">🏗️ Obras</span>`,
+    educacao: `<span class="area-tag educacao">📚 Educação</span>`
+  };
+  return map[area] || area;
+}
+
+function getAnomaliaTag(code) {
+  const map = {
+    sf: `<span class="anomaly-tag sf">Superfatur.</span>`,
+    cf: `<span class="anomaly-tag cf">CNPJ Susp.</span>`,
+    dl: `<span class="anomaly-tag dl">Disp. Ilícita</span>`,
+    cn: `<span class="anomaly-tag cn">Concentração</span>`
+  };
+  return map[code] || code;
+}
+
+function getRiskColor(level) {
+  return { critical: '#ff4d4d', high: '#ff8c42', medium: '#f5c842', low: '#00b85f' }[level] || '#00b85f';
+}
+
+function renderTable(data) {
+  const tbody = document.getElementById('contractTable');
+  tbody.innerHTML = data.map(c => `
+    <tr onclick="openModal('${c.id}')">
+      <td><span class="contract-id">${c.id}</span></td>
+      <td>
+        <div class="contract-name">${c.name}</div>
+        <div class="contract-supplier">${c.supplier}</div>
+      </td>
+      <td>${getAreaTag(c.area)}</td>
+      <td><span class="valor">${c.valor}</span></td>
+      <td>
+        <div class="risk-score ${getRiskClass(c.riskLevel)}">
+          <div class="risk-bar-bg">
+            <div class="risk-bar-fill" style="width:${c.risk}%;background:${getRiskColor(c.riskLevel)}"></div>
+          </div>
+          <span class="risk-score-num">${c.risk}</span>
+        </div>
+      </td>
+      <td>${c.anomalias.map(getAnomaliaTag).join('')}</td>
+    </tr>
+  `).join('');
+}
+
+function filterArea(area, btn) {
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  const filtered = area === 'all' ? contracts : contracts.filter(c => c.area === area);
+  renderTable(filtered);
+}
+
+function openModal(id) {
+  const c = contracts.find(x => x.id === id);
+  if (!c) return;
+
+  document.getElementById('modalTitle').textContent = c.name;
+  document.getElementById('modalId').textContent = `${c.id} · ${c.secretaria}`;
+
+  const color = getRiskColor(c.riskLevel);
+  const levelLabel = { critical: 'CRÍTICO', high: 'ALTO', medium: 'MÉDIO', low: 'BAIXO' }[c.riskLevel];
+
+  document.getElementById('modalBody').innerHTML = `
+    <div class="modal-section">
+      <div class="modal-section-title">Score de Risco</div>
+      <div class="modal-risk-display">
+        <div>
+          <div class="modal-risk-score" style="color:${color}">${c.risk}</div>
+          <div class="modal-risk-label">Nível: <strong style="color:${color}">${levelLabel}</strong></div>
+        </div>
+        <div class="modal-risk-bar-bg">
+          <div class="modal-risk-bar-fill" style="width:${c.risk}%;background:${color}"></div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-section">
+      <div class="modal-section-title">Dados do Contrato</div>
+      <div class="info-grid">
+        <div class="info-item">
+          <div class="info-item-label">Fornecedor</div>
+          <div class="info-item-value">${c.supplier}</div>
+        </div>
+        <div class="info-item">
+          <div class="info-item-label">CNPJ</div>
+          <div class="info-item-value" style="font-family:Space Mono,monospace;font-size:12px">${c.cnpj}</div>
+        </div>
+        <div class="info-item">
+          <div class="info-item-label">Modalidade</div>
+          <div class="info-item-value">${c.modalidade}</div>
+        </div>
+        <div class="info-item">
+          <div class="info-item-label">Valor Contratado</div>
+          <div class="info-item-value" style="color:var(--orange);font-family:Space Mono,monospace">${c.valor}</div>
+        </div>
+        <div class="info-item">
+          <div class="info-item-label">Data</div>
+          <div class="info-item-value">${c.data}</div>
+        </div>
+        <div class="info-item">
+          <div class="info-item-label">Área</div>
+          <div class="info-item-value">${getAreaTag(c.area)}</div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-section">
+      <div class="modal-section-title">Anomalias Detectadas pelo Modelo</div>
+      <div class="anomaly-list">
+        ${c.detalhes.map(d => `
+          <div class="anomaly-item ${d.severity}">
+            <span class="anomaly-severity ${d.severity}">${d.severity.toUpperCase()}</span>
+            <div class="anomaly-desc">${d.desc}</div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+    <div class="modal-section">
+      <div class="modal-section-title">Recomendação</div>
+      <div style="background:rgba(255,77,77,0.08);border:1px solid rgba(255,77,77,0.2);border-radius:6px;padding:14px;font-size:12px;color:var(--text-dim);line-height:1.7">
+        ${c.riskLevel === 'critical' ? '🔴 <strong style="color:#ff6060">Encaminhar imediatamente ao MP/TCU.</strong> Contrato sugere indícios de irregularidade grave. Recomenda-se instauração de procedimento investigativo e, se cabível, medida cautelar de suspensão.' :
+          c.riskLevel === 'high' ? '🟠 <strong style="color:#ffaa70">Incluir na pauta de fiscalização prioritária.</strong> Solicitar documentação complementar à secretaria responsável e diligência junto ao fornecedor.' :
+          '🟡 <strong style="color:#f5d070">Monitorar.</strong> Incluir em acompanhamento periódico. Cruzar com dados de aditivos futuros e novas contratações do mesmo fornecedor.'}
+      </div>
+    </div>
+  `;
+
+  document.getElementById('modalOverlay').classList.add('open');
+}
+
+function closeModal(e) {
+  if (e.target === document.getElementById('modalOverlay')) closeModalBtn();
+}
+
+function closeModalBtn() {
+  document.getElementById('modalOverlay').classList.remove('open');
+}
+
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModalBtn(); });
+
+// Init
+renderTable(contracts);
+
+// Tab buttons
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', function() {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    this.classList.add('active');
+    const label = this.textContent.trim();
+    let filtered = contracts;
+    if (label === 'Críticos') filtered = contracts.filter(c => c.riskLevel === 'critical');
+    else if (label === 'Altos') filtered = contracts.filter(c => c.riskLevel === 'high');
+    else if (label === 'Médios') filtered = contracts.filter(c => c.riskLevel === 'medium');
+    renderTable(filtered);
+  });
+});
+</script>
+</body>
+</html>
